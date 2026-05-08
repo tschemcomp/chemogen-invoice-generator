@@ -297,7 +297,21 @@ body{font-family:'DM Sans',sans-serif;background:#f0f2f5;min-height:100vh;color:
       <option value="">— keep —</option>
     </select>
     <label>Month:</label>
-    <input type="text" id="bulkMonth" class="bulk-input" placeholder="e.g. Apr-26" style="width:80px">
+    <select id="bulkMonth" class="bulk-input" style="width:95px">
+      <option value="">— keep current —</option>
+      <option value="Jan-26">Jan-26</option>
+      <option value="Feb-26">Feb-26</option>
+      <option value="Mar-26">Mar-26</option>
+      <option value="Apr-26">Apr-26</option>
+      <option value="May-26">May-26</option>
+      <option value="Jun-26">Jun-26</option>
+      <option value="Jul-26">Jul-26</option>
+      <option value="Aug-26">Aug-26</option>
+      <option value="Sep-26">Sep-26</option>
+      <option value="Oct-26">Oct-26</option>
+      <option value="Nov-26">Nov-26</option>
+      <option value="Dec-26">Dec-26</option>
+    </select>
     <label>Date:</label>
     <input type="date" id="bulkDate" class="bulk-input">
     <label>Disc%:</label>
@@ -310,6 +324,9 @@ body{font-family:'DM Sans',sans-serif;background:#f0f2f5;min-height:100vh;color:
     <div class="toolbar-left">
       <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)" title="Select all">
       <span class="sel-count" id="selCount"><b>0</b> of <b id="totalCount">0</b> selected</span>
+      <span id="facHint" style="font-size:10px;color:var(--teal);background:rgba(13,122,110,.08);padding:3px 8px;border-radius:5px;display:none">
+        💡 Faculty: Enter work description, total hours & fixed amount directly
+      </span>
     </div>
     <div class="toolbar-right">
       <span style="font-size:11px;color:var(--gray-600)">Invoice prefix:</span>
@@ -522,6 +539,8 @@ function setType(t){
   document.getElementById('typeStudent').className='type-btn'+(t==='student'?' active':'');
   document.getElementById('typeFaculty').className='type-btn'+(t==='faculty'?' active-fac':'');
   updateGenButton();
+  const hint=document.getElementById('facHint');
+  if(hint) hint.style.display=t==='faculty'?'inline':'none';
   if(headers.length){buildMapGrid();autoMap();}
   if(tableRows.length) buildTable();
 }
@@ -631,10 +650,13 @@ function buildTableRows(){
     class:    getCellVal(r,'mapClass'),
     phone:    getCellVal(r,'mapPhone'),
     hours:    getCellVal(r,'mapFacHours')||'1',
-    code:     '',          // user picks per row
-    month:    today_month(),
-    qty:      '1',
-    discount: '0',
+    code:       '',
+    month:      today_month(), // e.g. May-26
+    qty:        '1',
+    workDesc:   '',      // faculty: work description
+    totalHours: '0',     // faculty: total hours worked
+    fixedAmount:'0',     // faculty: fixed total payment
+    discount:   '0',
     date:     today_date(),
     payment:  'ONLINE',
   }));
@@ -653,6 +675,24 @@ function rebuildTableRows(){
   buildTable();
 }
 
+// ── MONTH OPTIONS HELPER ─────────────────────────────────────────────────
+function buildMonthOptions(selected){
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // Support both current year and next year options
+  const yr1=new Date().getFullYear();
+  const yr2=yr1+1;
+  const yrs=[String(yr1).slice(-2), String(yr2).slice(-2)];
+  let opts='';
+  yrs.forEach(yr=>{
+    months.forEach(m=>{
+      const val=m+'-'+yr;
+      const isSel=(selected===val)?'selected':'';
+      opts+=`<option value="${val}" ${isSel}>${m}-${yr}</option>`;
+    });
+  });
+  return opts;
+}
+
 // ── BUILD EDITABLE TABLE ──────────────────────────────────────────────────
 function buildTable(){
   const isFac=invType==='faculty';
@@ -663,10 +703,11 @@ function buildTable(){
     <th>#</th>
     <th>Name</th>
     <th>${isFac?'Subject/Area':'School / College'}</th>
-    ${isFac?'<th>Hours</th>':'<th>Class</th>'}
-    <th>${isFac?'Rate/Hr (₹)':'Course / Service'}</th>
+    ${isFac?'<th title="e.g. Teaching May (13 days × 2 hrs)">Work Description</th>':'<th>Class</th>'}
+    ${isFac?'<th title="Total hours worked e.g. 26">Total Hrs</th>':''}
+    <th>${isFac?'Amount (₹)':'Course / Service'}</th>
     <th>Month</th>
-    <th>${isFac?'Qty':'Qty'}</th>
+    ${isFac?'':'<th>Qty</th>'}
     <th>Disc%</th>
     <th>Date</th>
     <th>Payment</th>
@@ -684,16 +725,21 @@ function buildTable(){
       <td class="cell-name"><input class="cell-input" value="${esc(tr.name)}" onchange="upd(${i},'name',this.value)"></td>
       <td class="cell-school"><input class="cell-input" value="${esc(tr.school)}" onchange="upd(${i},'school',this.value)"></td>
       <td>${isFac
-        ?`<input class="cell-input cell-num" style="width:60px" value="${esc(tr.hours)}" onchange="upd(${i},'hours',this.value);refreshAmt(${i})">`
+        ?`<input class="cell-input" style="min-width:160px" value="${esc(tr.workDesc||'')}" onchange="upd(${i},'workDesc',this.value)" placeholder="e.g. Teaching May (13 days × 2 hrs)">`
         :`<input class="cell-input" style="width:60px" value="${esc(tr.class)}" onchange="upd(${i},'class',this.value)">`
       }</td>
+      ${isFac?`<td><input class="cell-input cell-num" style="width:60px" value="${esc(tr.totalHours||'0')}" onchange="upd(${i},'totalHours',this.value);refreshAmt(${i})" title="Total hours worked e.g. 26" placeholder="hrs"></td>`:''}
       <td>${isFac
-        ?`<input class="cell-input cell-num" style="width:80px" value="${tr.rate||200}" onchange="upd(${i},'rate',this.value);refreshAmt(${i})">`
+        ?`<input class="cell-input cell-num" style="width:90px;font-weight:600;color:var(--teal)" value="${tr.fixedAmount||'0'}" onchange="upd(${i},'fixedAmount',this.value);refreshAmt(${i})" placeholder="₹ total">`
         :`<select class="cell-select cell-code" onchange="upd(${i},'code',this.value);refreshAmt(${i})">${codeOpts.replace(`value="${tr.code}"`,`value="${tr.code}" selected`)}</select>`
       }</td>
-      <td><input class="cell-input cell-month" value="${esc(tr.month)}" onchange="upd(${i},'month',this.value)"></td>
-      <td><input class="cell-input cell-num" value="${esc(tr.qty)}" onchange="upd(${i},'qty',this.value);refreshAmt(${i})"></td>
-      <td><input class="cell-input cell-num" value="${esc(tr.discount)}" onchange="upd(${i},'discount',this.value);refreshAmt(${i})"></td>
+      <td>
+        <select class="cell-select" style="width:90px" onchange="upd(${i},'month',this.value)">
+          ${buildMonthOptions(tr.month)}
+        </select>
+      </td>
+      ${!isFac?`<td><input class="cell-input cell-num" style="width:50px" value="${esc(tr.qty)}" onchange="upd(${i},'qty',this.value);refreshAmt(${i})"></td>`:''}
+      <td><input class="cell-input cell-num" style="width:50px" value="${esc(tr.discount)}" onchange="upd(${i},'discount',this.value);refreshAmt(${i})"></td>
       <td><input class="cell-input cell-date" type="date" value="${tr.date}" onchange="upd(${i},'date',this.value)"></td>
       <td><select class="cell-select" onchange="upd(${i},'payment',this.value)">
         ${['ONLINE','CASH','CHEQUE','UPI','BANK TRANSFER'].map(v=>`<option${v===tr.payment?' selected':''}>${v}</option>`).join('')}
@@ -709,10 +755,9 @@ function upd(i,k,v){tableRows[i][k]=v;updateGenNote()}
 function refreshAmt(i){document.getElementById('amt_'+i).textContent=inr(calcAmount(tableRows[i]))}
 function calcAmount(tr){
   if(invType==='faculty'){
-    const rate=parseFloat(tr.rate||200)||0;
-    const qty=parseInt(tr.qty||1)||1;
+    const amount=parseFloat(tr.fixedAmount||0)||0;  // fixed total amount
     const disc=parseFloat(tr.discount||0)||0;
-    return rate*qty*(1-disc/100);
+    return amount*(1-disc/100);
   }
   const p=PRICES.find(x=>x.code===tr.code);
   const unit=p?p.charge:0;
@@ -787,10 +832,12 @@ function generateSelected(){
       unitPrice=pe?pe.charge:0;
       desc=pe?pe.name:tr.code;
     } else {
-      unitPrice=parseFloat(tr.rate||200)||0;
-      desc=tr.school||'Teaching Services';
+      // Faculty: fixed amount, description from workDesc
+      unitPrice=parseFloat(tr.fixedAmount||0)||0;
+      desc=tr.workDesc||(tr.school?tr.school+' — Teaching Services':'Teaching Services');
     }
-    const qty=parseInt(tr.qty)||1;
+    const qty=invType==='faculty' ? 1 : (parseInt(tr.qty)||1);
+    const month=tr.month||today_month();
     const discount=parseFloat(tr.discount)||0;
     const subtotal=unitPrice*qty;
     const discAmt=subtotal*discount/100;
@@ -806,7 +853,9 @@ function generateSelected(){
       class:tr.class||'',
       phone:tr.phone||'',
       hours:tr.hours||'',
-      items:[{desc,month:tr.month,qty,unitPrice,total:subtotal}],
+      items:[{desc,month:month,qty,
+        totalHours:invType==='faculty'?(tr.totalHours||''):null,
+        unitPrice,total:subtotal}],
       subtotal,discount,discAmt,grand,
       payment:tr.payment||defaultPayment,
     });
@@ -891,12 +940,19 @@ function buildInvoiceHTML(inv){
     <thead><tr>
       <th style="width:44px">Sl.No.</th><th>Description</th>
       <th style="width:68px">Month</th>
-      <th style="width:64px">${isFac?'Hours':'Min/Stu.'}</th>
-      <th style="width:96px">${isFac?'Rate/Hr':'Unit Price'}</th>
+      <th style="width:72px">${isFac?'Hrs Worked':'Min/Stu.'}</th>
+      <th style="width:96px">${isFac?'Rate':'Unit Price'}</th>
       <th style="width:96px">Total</th>
     </tr></thead>
     <tbody>
-      ${inv.items.map((it,i)=>`<tr><td>${i+1}</td><td>${it.desc}</td><td>${it.month}</td><td>${it.qty}</td><td>${inr(it.unitPrice)}</td><td>${inr(it.total)}</td></tr>`).join('')}
+      ${inv.items.map((it,i)=>{
+      const isFacInv=inv.type==='faculty';
+      // Faculty: show total hours in qty column, fixed amount in both price and total
+      const qtyLabel=isFacInv?(it.totalHours?it.totalHours+' hrs':'—'):it.qty;
+      const priceLabel=isFacInv?'—':inr(it.unitPrice);
+      const totalLabel=inr(it.total);
+      return `<tr><td>${i+1}</td><td>${it.desc}</td><td>${it.month}</td><td style="text-align:center">${qtyLabel}</td><td style="text-align:right">${priceLabel}</td><td style="text-align:right">${totalLabel}</td></tr>`;
+    }).join('')}
       ${emptyRows}
     </tbody>
   </table>
@@ -1003,7 +1059,9 @@ async function downloadAllPDFs(){
 // ── TEMPLATE ──────────────────────────────────────────────────────────────
 function downloadTemplate(){
   const rows=invType==='faculty'
-    ?[['Name','Subject','Hours','Phone'],['Dr. Rahul Sharma','Physical Chemistry',20,'+91-9800000001'],['Ms. Priya Ghosh','Organic Chemistry',18,'+91-9800000002']]
+    ?[['Name','Subject/Area','Total Hours','Fixed Amount','Month','Phone'],
+      ['Mr. Tridip Biswas','Office Work (13 days × 2 hrs)',26,3000,'May-26','+91-6290390960'],
+      ['Ms. Abarna Roy','ICSE-9-Chemistry (13 days × 2 hrs)',26,3000,'May-26','+91-9800000002']]
     :[['Name','School/College','Class','Phone'],['Srimoyee Sarkar','OUR LADY QUEEN OF THE MISSIONS SCHOOL SALT LAKE','12','+91-8910328656'],['Arjun Mehta','St. Xaviers Collegiate School','11','+91-9876543210'],['Priya Dey','Don Bosco School Park Circus','12','+91-9123456789']];
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),invType==='faculty'?'Faculty':'Students');
